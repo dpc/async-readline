@@ -1,0 +1,13 @@
+[package]
+name = "tokio-readline"
+version = "0.1.0"
+authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+
+[dependencies]
+mio = "*"
+futures = "*"
+tokio = "*"
+tokio-core = "*"
+libc = "*"
+nix = "*"
+termios = "*"

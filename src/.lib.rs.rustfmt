@@ -1,0 +1,57 @@
+extern crate mio;
+extern crate tokio_core;
+extern crate libc;
+
+use mio::unix::EventedFd;
+use tokio_core::reactor::PollEvented;
+use std::io;
+
+
+static STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
+static STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
+
+    fn enable_raw_mode(&self) -> Result<Mode> {
+        use nix::errno::Errno::ENOTTY;
+        use nix::sys::termios::{BRKINT, CS8, ECHO, ICANON, ICRNL, IEXTEN, INPCK, ISIG, ISTRIP,
+                                IXON, /* OPOST, */ VMIN, VTIME};
+        if !self.stdin_isatty {
+            try!(Err(nix::Error::from_errno(ENOTTY)));
+        }
+        let original_mode = try!(termios::tcgetattr(STDIN_FILENO));
+        let mut raw = original_mode;
+        // disable BREAK interrupt, CR to NL conversion on input,
+        // input parity check, strip high bit (bit 8), output flow control
+        raw.c_iflag = raw.c_iflag & !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        // we don't want raw output, it turns newlines into straight linefeeds
+        // raw.c_oflag = raw.c_oflag & !(OPOST); // disable all output processing
+        raw.c_cflag = raw.c_cflag | (CS8); // character-size mark (8 bits)
+        // disable echoing, canonical mode, extended input processing and signals
+        raw.c_lflag = raw.c_lflag & !(ECHO | ICANON | IEXTEN | ISIG);
+        raw.c_cc[VMIN] = 1; // One character-at-a-time input
+        raw.c_cc[VTIME] = 0; // with blocking read
+        try!(termios::tcsetattr(STDIN_FILENO, termios::TCSADRAIN, &raw));
+        Ok(original_mode)
+    }
+
+struct AsyncRawStdio {
+    io : PollEvented<EventedFd<'static>>,
+}
+
+
+impl AsyncRawStdio {
+
+    pub fn new(handle : &tokio_core::reactor::Handle) -> io::Result<Self> {
+        let evented_fd = EventedFd(&STDIN_FILENO);
+        let poll_evented = PollEvented::new(evented_fd, handle)?;
+        Ok(AsyncRawStdio {
+            io : poll_evented,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+    }
+}
