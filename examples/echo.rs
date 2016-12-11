@@ -27,23 +27,48 @@ use tokio_core::io::{copy, Io};
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 
+use std::io::{self, Write};
+
+use tokio_core::io::{Codec, EasyBuf};
+
+struct CharCodec;
+
+impl Codec for CharCodec {
+    type In = u8;
+    type Out = u8;
+
+    fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
+        if buf.len() == 0 {
+            return Ok(None)
+        }
+
+        let ret = buf.as_ref()[0];
+        buf.drain_to(1);
+        Ok(Some(ret))
+    }
+
+    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
+        write!(buf, "Got {}\n", msg)?;
+        Ok(())
+    }
+}
+
 fn main() {
     // Create the event loop that will drive this server
     let mut l = Core::new().unwrap();
     let handle = l.handle();
 
-    let mut buf = [0u8; 256];
     let stdio = tokio_readline::RawAsyncStdio::new(&handle).unwrap();
-    let stdin = stdio.stdin(&mut buf);
+    let (stdin, stdout, _) = stdio.split();
 
-    // Pull out the stream of incoming connections and then for each new
-    // one spin up a new task copying data.
-    //
-    // We use the `io::copy` future to copy all data from the
-    // reading half onto the writing half.
-    let done = stdin.for_each(move |count| {
-        println!("got: {} {:?}", count, &buf[..count]);
-        Ok(())
-    });
+    let framed_in = stdin.framed(CharCodec);
+    let framed_out = stdout.framed(CharCodec);
+
+    let done = framed_in
+        /*.map(move |ch| {
+        format!("got: {}", ch)
+    })*/
+        .forward(framed_out);
+
     l.run(done).unwrap();
 }
