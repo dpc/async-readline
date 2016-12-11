@@ -56,12 +56,13 @@ fn main() {
     let stdio = tokio_readline::RawStdio::new(&handle).unwrap();
     let (stdin, stdout, _) = stdio.split();
 
-    let framed_in = stdin.framed(CharCodec);
     let framed_out = stdout.framed(CharCodec);
 
-    let done = framed_in
+    let commands = tokio_readline::init(stdin);
+
+    let done = commands
         .map(move |ch| {
-            format!("got: {}\n", ch)
+            format!("got: {:?}\n", ch)
         })
         .forward(framed_out);
 

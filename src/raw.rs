@@ -9,7 +9,6 @@ use termios;
 use mio::unix::EventedFd;
 use tokio_core::reactor::PollEvented;
 use std::io;
-use futures::Async;
 
 static STDIN_FILENO: libc::c_int = libc::STDIN_FILENO;
 static STDOUT_FILENO: libc::c_int = libc::STDOUT_FILENO;
@@ -85,21 +84,23 @@ impl io::Write for StdioFd {
         Ok(())
     }
 }
-pub struct RawAsyncStdio {
+
+pub struct RawStdio {
     stdin : PollEvented<StdioFd>,
     stdout : PollEvented<StdioFd>,
     stderr : PollEvented<StdioFd>,
     stdin_isatty : bool,
 }
 
+pub type PollFd = PollEvented<StdioFd>;
 
-impl RawAsyncStdio {
+impl RawStdio {
 
     pub fn new(handle : &tokio_core::reactor::Handle) -> io::Result<Self> {
         let stdin_poll_evented = PollEvented::new(StdioFd::stdin(), handle)?;
         let stdout_poll_evented = PollEvented::new(StdioFd::stdout(), handle)?;
         let stderr_poll_evented = PollEvented::new(StdioFd::stderr(), handle)?;
-        let raw_stdio = RawAsyncStdio {
+        let raw_stdio = RawStdio {
             stdin : stdin_poll_evented,
             stdout : stdout_poll_evented,
             stderr : stderr_poll_evented,
