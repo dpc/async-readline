@@ -1,70 +1,80 @@
-//! An echo server that just writes back everything that's written to it.
-//!
-//! If you're on unix you can test this out by in one terminal executing:
-//!
-//! ```sh
-//! $ cargo run --example echo
-//! ```
-//!
-//! and in another terminal you can run:
-//!
-//! ```sh
-//! $ nc localhost 8080
-//! ```
-//!
-//! Each line you type in to the `nc` terminal should be echo'd back to you!
-
 extern crate futures;
 extern crate tokio_core;
-extern crate tokio_readline;
+extern crate async_readline;
 
 use futures::stream::Stream;
-use tokio_core::io::{Io};
 use tokio_core::reactor::Core;
 
-use std::io::{self, Write};
+use std::io::Write;
 
-use tokio_core::io::{Codec, EasyBuf};
-
-struct CharCodec;
-
-impl Codec for CharCodec {
-    type In = u8;
-    type Out = String;
-
-    fn decode(&mut self, buf: &mut EasyBuf) -> Result<Option<Self::In>, io::Error> {
-        if buf.len() == 0 {
-            return Ok(None)
-        }
-
-        let ret = buf.as_ref()[0];
-        buf.drain_to(1);
-        Ok(Some(ret))
-    }
-
-    fn encode(&mut self, msg: Self::Out, buf: &mut Vec<u8>) -> io::Result<()> {
-        write!(buf, "{}", msg)?;
-        Ok(())
-    }
-}
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn main() {
     // Create the event loop that will drive this server
     let mut l = Core::new().unwrap();
     let handle = l.handle();
 
-    let stdio = tokio_readline::RawStdio::new(&handle).unwrap();
+    let periodic_timer1 = tokio_core::reactor::Interval::new(std::time::Duration::from_millis(2500), &handle).unwrap();
+    let periodic_timer2 = tokio_core::reactor::Interval::new(std::time::Duration::from_millis(500), &handle).unwrap();
+    let stdio = async_readline::RawStdio::new(&handle).unwrap();
     let (stdin, stdout, _) = stdio.split();
 
-    let framed_out = stdout.framed(CharCodec);
 
-    let commands = tokio_readline::init(stdin);
+    let (commands, rl_writer) = async_readline::init(stdin, stdout);
+
+    let acc1 = Rc::new(RefCell::new(0));
+    let acc2 = acc1.clone();
+    let acc3 = acc1.clone();
+    let connected1 = Rc::new(RefCell::new(false));
+    let connected2 = connected1.clone();
+    let connected3 = connected1.clone();
 
     let done = commands
-        .map(move |ch| {
-            format!("got: {:?}\n", ch)
+        .map(move |line| {
+            *connected1.borrow_mut() = false;
+            *acc1.borrow_mut() = 0;
+
+            let mut v = vec!();
+            let _ = write!(v, "\n> ");
+            v.append(&mut line.line.clone());
+            v
         })
-        .forward(framed_out);
+        .select(
+            periodic_timer1
+            .map(|_| {
+                let mut v = vec!();
+                if *connected2.borrow() {
+                    *acc2.borrow_mut() += 1;
+                    let _ = write!(v, "\nFiles ready: {} ", *acc2.borrow());
+                }
+                v
+            })
+            )
+        .select(
+            periodic_timer2.map(|_| {
+                let mut v = vec!();
+                if !*connected3.borrow() {
+                    *acc3.borrow_mut() += 1;
+                    if *acc3.borrow() > 3 {
+                        let _ = write!(v, "\nConnected!");
+                        *acc3.borrow_mut() = 0;
+                        *connected3.borrow_mut() = true;
+                    } else {
+                        let _ = write!(v, "\nConnecting... ");
+                    }
+                } else if *acc3.borrow() > 10 {
+                    let _ = write!(v, "Disconnecting... ");
+                    *acc3.borrow_mut() = 0;
+                    *connected3.borrow_mut() = false;
+                } else if *acc3.borrow() > 5 {
+                    let _ = write!(v, "Error... ");
+                }
+
+                v
+            })
+            )
+            .forward(rl_writer);
 
     l.run(done).unwrap();
 }

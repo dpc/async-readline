@@ -1,13 +1,15 @@
 [package]
-name = "tokio-readline"
+name = "async-readline"
 version = "0.1.0"
 authors = ["Dawid Ciężarkiewicz <dpc@dpc.pw>"]
+license = "MPL-2.0"
+readme = "README.md"
 
 [dependencies]
-mio = "*"
-futures = "*"
-tokio = "*"
-tokio-core = "*"
-libc = "*"
-nix = "*"
-termios = "*"
+mio = "0.6.1"
+futures = "0.1.6"
+tokio = "0.0.0"
+tokio-core = "0.1.1"
+libc = "0.2.18"
+nix = "0.7.0"
+termios = "0.2.2"
